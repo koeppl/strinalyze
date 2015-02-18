@@ -1,0 +1,11 @@
+build/
+Coverage/
+Profiling/
+Release/
+*.class
+*~
+*.jar
+*.o
+*.so
+*.hi
+*.out
