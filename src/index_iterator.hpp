@@ -1,10 +1,17 @@
+/** 
+ * @file index_iterator.hpp
+ * @brief Iterator based on an index value
+ * @author Dominik Köppl
+ * 
+ */
 #ifndef INDEX_ITERATOR_HPP
 #define INDEX_ITERATOR_HPP
 
 
 /*!
  * Iterator that is an actual wrapper around an index. 
- * Can be futher enhanced as a RandomAccessIterator.
+ * Can be further enhanced as a RandomAccessIterator.
+ * @tparam T container class with operator[]
  */
 template<class T>
 class IndexIterator : public std::iterator<std::forward_iterator_tag, T>

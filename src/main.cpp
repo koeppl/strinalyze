@@ -1,32 +1,50 @@
-//#include <chaiscript/chaiscript.hpp>
-
-#include <sdsl/suffix_arrays.hpp>
-#include <sdsl/suffix_trees.hpp>
 #include <string>
-#include <sdsl/int_vector.hpp>
 #include <iomanip>
-//#include <sstring>
-#include <sdsl/csa_wt.hpp>
 #include <glog/logging.h>
 #include "substring.hpp"
-#include "index_iterator.hpp"
 #include "checked_vector.hpp"
 
-///
+//SAIS
+#if defined(__GNUG__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wchar-subscripts"
+#endif
+#include "sais.hxx"
+#if defined(__GNUG__)
+#pragma GCC diagnostic pop
+#endif
+
+#include <cmath>
+#include <iostream>
+#include <functional>
+#include <algorithm>
+#include "index_iterator.hpp"
+#include "arrayfunctional.hpp"
+
 #include <gflags/gflags.h>
-
 DEFINE_uint64(threads, 4, "Number of Threads");
-DEFINE_string(examine, "", "String to examine");
-DEFINE_bool(stripDollar, true, "Strip the delimiting character of the string");
-DEFINE_bool(zeroBasedNumbering, true, "Start counting at zero for output");
+DEFINE_uint64(minlimit, 0, "Starting Number of Sequence");
+DEFINE_uint64(maxlimit, 1ULL<<40, "Ending Number of Sequence");
+DEFINE_string(ex, "", "String to examine");
+DEFINE_string(generator, "", "Use a generator sequence");
+DEFINE_string(appendString, "", "Append a string to the sequence");
+DEFINE_string(prependString, "", "Prepend a string to the sequence");
+DEFINE_bool(stripDollar, false, "Strip the delimiting character of the string");
+DEFINE_bool(zeroindex, false, "Start counting indices at zero");
 ///
-
-
-using namespace sdsl;
-using namespace std;
 
 #define BOUNDS(x) x.begin(), x.end()
 
+/** 
+ * Tests whether a is a rotation of b.
+ *
+ * @brief i.e., whether there exists a k such that \f$a[k+i \mod n] = b[i] \forall 0 \le i \le n \f$.
+ * 
+ * @param a Array a[0..n]
+ * @param b Array b[0..n]
+ * 
+ * @return either the rotation-width [1,n] or -1 on error. Returns zero if a = b.
+ */
 template<class T>
 int rotation_order(const T& a , const T& b) {
 	typename T::const_iterator azerop = std::find(BOUNDS(a), 0);
@@ -41,6 +59,17 @@ int rotation_order(const T& a , const T& b) {
 	}
 	return (azero < bzero) ? (bzero - azero) : (bzero + length - azero);
 }
+
+/** 
+ * Tests whether a is a reversed rotation of b.
+ *
+ * @brief i.e., whether there exists a k such that \f$a[k-i \mod n] = b[i] \forall 0 \le i \le n \f$.
+ * 
+ * @param a Array a[0..n]
+ * @param b Array b[0..n]
+ * 
+ * @return either the rotation-width [1,n] or -1 on error.
+ */
 template<class T>
 int reverse_rotation_order(const T& a , const T& b) {
 	typename T::const_iterator azerop = std::find(BOUNDS(a), 0);
@@ -56,77 +85,50 @@ int reverse_rotation_order(const T& a , const T& b) {
 	return (azero < bzero) ? (bzero - azero) : (bzero + length - azero);
 }
 
-std::string intToString(uint64_t z) {
-	const size_t length = static_cast<uint8_t>(std::log2(2+z));
-	std::string ret(length,0);
-	for(size_t i = 0; i < length; ++i)
-		ret[i] =  (z & (1ULL<<i)) == 0 ? 'a' : 'b';
-	return ret;
-}
 
-std::string lzclassic(size_t n) {
-	if(n==1) return "a";
-	if(n==2) return "b";
-	if(n==3) return "aa";
-	return lzclassic(n-2) + lzclassic(n-3) + lzclassic(n-2);
-}
-
-std::string lzl(size_t n) {
-	if(n==1) return "a";
-	if(n==2) return "b";
-	if(n==3) return "a";
-	if(n==4) return "aba";
-	if(n==5) return "baaba";
-	return lzl(n-2) + lzl(n-1);
-}
-
-std::string fibonacci(size_t n) {
-	if( n == 1) return "b";
-	if( n == 2) return "a";
-	return fibonacci(n-1) + fibonacci(n-2);
-}
-
-#ifdef NDEBUG
-typedef checked_vector<int> vektor_type;
-#else
-typedef vector<int> vektor_type;
-//#define vektor_type sdsl::int_vector<>
-#endif
-
-typedef cst_sct3<> cst_t;
-
-vektor_type create_sa(const char*const str, bool stripDollar) {
-	csa_wt<> csa;
-	sdsl::construct_im(csa, str, 1);
-	vektor_type sa(csa.size() - stripDollar  );
-	for (size_t i = 0; i < sa.size(); ++i) {
-		sa[i] = csa[i + stripDollar ];
-	}
+/** 
+ * Creates the Suffix Array of text, based on SAIS
+ * 
+ * @param text 
+ * @param stripDollar Shall the delimiting $ be neglected? If not, it is the lexicographically smallest suffix.
+ * 
+ * @return The suffix array
+ */
+template<typename vektor_type, typename string_type>
+vektor_type create_sa(const string_type& text, bool stripDollar) {
+	using namespace saisxx_private;
+	vektor_type sa(text.size()+!stripDollar);
+	saisxx<typename string_type::const_iterator, typename vektor_type::iterator, int>(text.begin(), sa.begin(), text.size()+!stripDollar);
 	return sa;
 }
 
-vektor_type create_sa(const cst_t& cst, bool stripDollar) {
-	vektor_type sa(cst.csa.size() - stripDollar );
-	for (size_t i = 0; i < sa.size(); ++i) {
-		sa[i] = cst.csa[i + stripDollar ];
-	}
-	return sa;
-}
-
-vektor_type create_lcp(const cst_t& cst, bool stripDollar) {
-	vektor_type lcp(cst.csa.size() - stripDollar );
-	for (size_t i = 0; i < lcp.size(); ++i) {
-		lcp[i] = cst.lcp[i + stripDollar];
+/** 
+ * @brief Kasai's LCP array construction algorithm
+ * 
+ * @param text 
+ * @param sa text's suffix array, maybe a subarray of the actual suffix array
+ * @param isa sa's inverse
+ * 
+ * @return LCP-array of text wrt. sa
+ */
+template<typename vektor_type, typename string_type>
+vektor_type create_lcp(const string_type& text, const vektor_type& sa, const vektor_type& isa) {
+	vektor_type lcp(sa.size());
+	lcp[0] = 0;
+	size_t h = 0;
+	for(size_t i = 0; i < lcp.size(); ++i) {
+		if(isa[i] == 0) continue;
+		const size_t j = sa[ isa[i] -1 ];
+		while(text[i+h] == text[j+h]) ++h;
+		lcp[isa[i]] = h;
+		h = h > 0 ? h-1 : 0;
 	}
 	return lcp;
 }
 
-cst_t create_cst(const char*const str) {
-	cst_t cst;
-	sdsl::construct_im(cst, str, 1);
-	return cst;
-}
-
+/** Generates the inverse of an array
+ */
+template<typename vektor_type>
 vektor_type inverse(const vektor_type& sa) {
 	vektor_type isa(sa.size());
 	for (size_t i = 0; i < sa.size(); ++i) {
@@ -135,216 +137,131 @@ vektor_type inverse(const vektor_type& sa) {
 	return isa;
 }
 
+
+/** 
+ * Generates \$f LF[i] = isa[ sa[i] - 1 \mod n] \forall 0 \le i \le n = \abs{sa} \$f
+ * 
+ * @param sa the suffix array
+ * @param isa sa's inverse
+ * 
+ * @return LF-array
+ */
+template<class vektor_type>
+vektor_type lf_array(const vektor_type& sa, const vektor_type& isa) {
+	vektor_type LF(sa.size());
+	for (size_t i=0; i < sa.size(); ++i) {
+		LF[i] = isa[((sa[i]+sa.size()-1) % sa.size()) ];
+	}
+	return LF;
+}
+
+/** 
+ * Generates \$f \psi[i] = isa[ sa[i] + 1 \mod n] \forall 0 \le i \le n = \abs{sa} \$f
+ * 
+ * @param sa the suffix array
+ * @param isa sa's inverse
+ * 
+ * @return \$f \psi \$f-array
+ */
+template<class vektor_type>
 vektor_type psi_array(const vektor_type& sa, const vektor_type& isa) {
 	vektor_type psi(sa.size());
 	for (size_t i=0; i < sa.size(); ++i) {
-		psi[i] = isa[((sa[i]+sa.size()-1) % sa.size()) ];
+		psi[i] = isa[((sa[i]+sa.size()+1) % sa.size()) ];
 	}
 	return psi;
 }
 
 /** Printing stuff **/
-template<class T>
-void print_array(size_t width, const char* label, const T& arr) {
+template<class vektor_type>
+void print_array(size_t width, const char* label, const vektor_type& arr) {
 	std::cout << std::setw(4) << label << " ";
 	for(size_t i=0; i < arr.size(); ++i) {
 		std::cout << std::setw(width) << arr[i] << " ";
 	}
 	std::cout << "\n";
 }
+const char*const dollarSymbol = "$";
 
-template<class T>
-void print_value(const char* label, const T& value) {
-	std::cout << label << ": " << value << "\n";
+template<class vektor_type>
+void print_value(const char* label, const vektor_type& value) {
+	std::cout << (label == 0 ? dollarSymbol : label) << ": " << value << "\n";
+}
+void print_ending() {
+	std::cout << "------------------" << "\n";
 }
 
-template<class T>
-class ArrayFunction {
-	public:
-	using class_type     = ArrayFunction<T>;
-	using const_iterator = IndexIterator<class_type>;
-	using value_type     = T;
 
-	private:
-	const size_t m_length;
-	const std::function<size_t(size_t)> m_call;
-	public:
-	ArrayFunction(size_t length, std::function<T(size_t)> call) 
-		: m_length(length),	m_call(call)
-	{}
-	T operator[](size_t index) const {
-		DCHECK_LT(index, m_length);
-		return m_call(index);
-	}
-	size_t size() const {
-		return m_length;
-	}
-	const_iterator begin() const {
-		return IndexIterator<class_type>(*this, 0);
-	}
-	const_iterator end() const {
-		return IndexIterator<class_type>(*this, m_length);
-	}
-	bool operator==(const class_type&) const {
-		return true; // dummy
-	}
-};
+
 
 struct StringStats {
+#ifdef NDEBUG
+		typedef checked_vector<int> vektor_type;
+#else
+		typedef std::vector<int> vektor_type;
+		//#define vektor_type sdsl::int_vector<>
+#endif
+
 	const std::string text;
-	const cst_t cst;
+//	const cst_t cst;
 	const vektor_type sa;
-	const vektor_type lcp;
 	const vektor_type isa;
+	const vektor_type lcp;
 	const vektor_type psi;
+	const vektor_type lf;
 
 
 	StringStats(const std::string&& ttext) 
 		: text(ttext)
-		, cst(create_cst(text.c_str()))
-		, sa(create_sa(cst, FLAGS_stripDollar))
-		, lcp(create_lcp(cst, FLAGS_stripDollar))
-		, isa(inverse(sa))
-		, psi(psi_array(sa, isa))
+		, sa(create_sa<vektor_type>(text, FLAGS_stripDollar))
+		, isa(inverse<vektor_type>(sa))
+		, lcp(create_lcp<vektor_type>(text, sa, isa))
+		, psi(psi_array<vektor_type>(sa, isa))
+		, lf(lf_array<vektor_type>(sa, isa))
 	{
 	}
 	size_t size() const {
 		return sa.size();
 	}
+	void print(const bool isZeroBasedNumbering = true) const {
+		const size_t setwidth = static_cast<size_t>(std::log10(text.length()+1)) +1;
+		print_value("T", text);
+		print_value("|T|", text.size());
+		print_array(setwidth, "i",   ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + i; } ));
+		if(FLAGS_stripDollar) {
+			print_array(setwidth, "T",   text);
+		} else {
+			print_array(setwidth, "T", ArrayFunctional<char>  (size(), [&] (size_t i) { return text[i] == 0 ? '$' : text[i]; } ));
+		}
+		print_array(setwidth, "SA" , ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + sa[i] ; } ));
+		print_array(setwidth, "LCP", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lcp[i]; } ));
+		print_array(setwidth, "PLCP", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lcp[isa[i]]; } ));
+		print_array(setwidth, "ISA", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + isa[i]; } ));
+		print_array(setwidth, "psi", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + psi[i]; } ));
+		print_array(setwidth, "LF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + lf[i]; } ));
+		print_array(setwidth, "BWT", ArrayFunctional<char>  (size(), [&] (size_t i) { return text[sa[lf[i]]] == 0 ? '$' : text[sa[lf[i]]]; } ));
+		print_value("a", std::count(BOUNDS(text), 'a'));
+		print_value("b", std::count(BOUNDS(text), 'b'));
+		print_value("rotation_order", rotation_order(sa,isa));
+		print_value("reverse_rotation_order", reverse_rotation_order(sa, isa)); 
+	}
 };
 
-
-void print_analysis(const StringStats& stat, const bool isZeroBasedNumbering = true) {
-	const size_t setwidth = static_cast<size_t>(std::log10(stat.text.length()+1)) +1;
-	print_value("|T|", stat.text.size());
-	print_array(setwidth, "i",   ArrayFunction<size_t>(stat.size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + i; } ));
-	print_array(setwidth, "T",   stat.text);
-	print_array(setwidth, "SA" , ArrayFunction<size_t>(stat.size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + stat.sa[i] ; } ));
-	print_array(setwidth, "LCP", ArrayFunction<size_t>(stat.size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + stat.lcp[i]; } ));
-	print_array(setwidth, "ISA", ArrayFunction<size_t>(stat.size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + stat.isa[i]; } ));
-	print_array(setwidth, "psi", ArrayFunction<size_t>(stat.size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + stat.psi[i]; } ));
-	print_array(setwidth, "BWT", ArrayFunction<char>  (stat.size(), [&] (size_t i) { return stat.text[stat.sa[stat.psi[i]]]; } ));
-	print_value("rotation_order", rotation_order(stat.sa,stat.isa));
-
-	print_value("reverse_rotation_order", reverse_rotation_order(stat.sa, stat.isa)); 
-/*	print_value("reverse_rotation_order", reverse_rotation_order( 
-				Substring<vektor_type>(sa, 0, sa.size()-1),
-				Substring<vektor_type>(isa, 0, isa.size()-1)));
-*/
-}
-
-
-
-/*
-#include<chrono>
-#include<queue>
-void generate() {
-	constexpr size_t maxlen = 20;
-	std::queue<std::string> q;
-	std::queue<std::string> pq;
-	std::thread threads[NUM_THREADS];
-	std::mutex mu;
-	std::mutex mu2;
-	bool process = true;
-	for(size_t i = 0; i < NUM_THREADS; ++i) {
-//		threads[i] = std::thread(thread_func,mu, mu2, pq, process);
-		threads[i] = std::thread([&] () {
-	while(process || !pq.empty()) {
-		if(pq.empty()) {
-			std::this_thread::sleep_for (std::chrono::seconds(1));
-			continue;
-		}
-		std::string text = [&] () {
-			std::unique_lock<std::mutex> lock(mu2);
-			if(pq.empty()) return std::string("");
-			std::string ret = pq.front(); 
-			pq.pop();
-			return ret;
-		}();
-		if(text.length() == 0) return;
-		const cst_t cst = create_cst(text.c_str());
-		vektor_type sa = create_sa(cst);
-		strip_dollar_from_sa(sa);
-		vektor_type isa = inverse(sa);
-
-		const int rot = rotation_order(sa,isa);
-		if(rot > 0) {
-			std::unique_lock<std::mutex> lock(mu);
-			print_value("STRING", text);
-			print_value("length", text.length());
-			print_value("rotation_order", rot);
-			print_value("a", std::count(BOUNDS(text), 'a'));
-			print_value("b", std::count(BOUNDS(text), 'b'));
-			print_analysis(text);
-			continue;
-		}
-
-		const int invrot = reverse_rotation_order(sa,isa);
-		if(invrot > 0) {
-			std::unique_lock<std::mutex> lock(mu);
-			print_value("STRING", text);
-			print_value("length", text.length());
-			print_value("inverse_rotation_order", invrot);
-			print_value("a", std::count(BOUNDS(text), 'a'));
-			print_value("b", std::count(BOUNDS(text), 'b'));
-			continue;
-		}
-	}});
-	}
-
-	{
-		std::unique_lock<std::mutex> lock(mu2);
-		q.push("a");
-		q.push("b");
-		while(!q.empty()) {
-			std::string text = q.front(); q.pop();
-			if(text.length() < maxlen) {
-				q.push(text + "a");
-				q.push(text + "b");
-				pq.push(text + "a");
-				pq.push(text + "b");
-			}
-		}
-	}
-	
-	for(size_t i = 0; i < NUM_THREADS; ++i)
-		threads[i].join();
-}
-*/
-
-/*
-void run( std::string (*generator)(size_t)) {
-	for(size_t iFibRound = 3; iFibRound < 15; iFibRound+=1) {
-
-		print_value("==Round==", iFibRound);
-		std::string s = generator(iFibRound);
-		print_analysis(s, true, true);
-		
-		
-
-	}
-}
-*/
-
-
-#include<thread>
-void parallel_filter(
+#include <thread>
+#include <mutex>
+#include <atomic>
+void map_parallel(
 		std::function<std::string(size_t)> generator, 
 		const size_t left, const size_t right,
-		std::function<bool(const StringStats&)> predicate, 
-		std::function<void(const StringStats&)> output
+		std::function<void(size_t, std::string&)> mapto
 		) {
 	std::vector<std::thread> threads(FLAGS_threads);
-	std::mutex mutexOutput;
 	std::atomic_size_t index(left);
 	auto runnable = [&] () {
 		while(index.load() < right) {
-			const StringStats stats = StringStats(generator(++index));
-			if(stats.size() == 0) return;
-			if(predicate(stats)) { 
-				std::unique_lock<std::mutex> lock(mutexOutput);
-				output(stats);
-			}
+			const size_t mindex = ++index;
+			std::string text = generator(mindex);
+			mapto(mindex, text);
 		}};
 
 	for(size_t i = 0; i < FLAGS_threads; ++i) {
@@ -355,21 +272,229 @@ void parallel_filter(
 	}
 }
 
+
+/**
+ * Creates a standard word by a binary number.
+ * We use the mappings
+ * L(u,v) = (u,uv)
+ * R(u,v) = (vu,v)
+ * where we walk down a tree 
+ * 0 = L, left child 
+ * 1 = R, right child
+ */
+std::string intToStandardWord(uint64_t z) {
+	const size_t length = static_cast<uint8_t>(std::log2(2+z));
+	std::string u = "a";
+	std::string v = "b";
+	for(size_t i = 1; i < length; ++i) {
+		if( (z & (1ULL<<i)) == 0) v = u + v; 
+		else u = v + u;
+	}
+	
+	return (z & 1) ? u : v;
+
+	std::string ret(length,0);
+	for(size_t i = 0; i < length; ++i)
+		ret[i] =  (z & (1ULL<<i)) == 0 ? 'a' : 'b';
+	return ret;
+}
+
+/**
+ * Creates the binary string representation of z, stripping the most-significant bit.
+ * 
+ */
+std::string intToString(uint64_t z) {
+	const size_t length = static_cast<uint8_t>(std::log2(2+z));
+	std::string ret(length,0);
+	for(size_t i = 0; i < length; ++i)
+		ret[i] =  (z & (1ULL<<i)) == 0 ? 'a' : 'b';
+	return ret;
+}
+
+/** 
+ * LZ77-Factorization of the Fibonacci words
+ * This factorization is a palindromic factorization
+ */
+std::string fib_lz77(size_t n) {
+	if(n==1) return "a";
+	if(n==2) return "b";
+	if(n==3) return "aa";
+	return fib_lz77(n-2) + fib_lz77(n-3) + fib_lz77(n-2);
+}
+
+/** l-Factorization of the Fibonacci words
+ */
+std::string fib_lzl(size_t n) {
+	if(n==1) return "a";
+	if(n==2) return "b";
+	if(n==3) return "a";
+	if(n==4) return "aba";
+	if(n==5) return "baaba";
+	return fib_lzl(n-2) + fib_lzl(n-1);
+}
+
+std::string fibonacci_word(size_t n) {
+	if( n == 1) return "b";
+	if( n == 2) return "a";
+	return fibonacci_word(n-1) + fibonacci_word(n-2);
+}
+std::string rabbit_sequence(size_t n) {
+	if( n == 1) return "a";
+	if( n == 2) return "b";
+	return rabbit_sequence(n-1) + rabbit_sequence(n-2);
+}
+
+/** 
+ * Prepends an arbitrary string in front of the generated sequence.
+ */
+class Prepender {
+	const std::function<std::string(size_t)> m_func;
+	const std::string& m_data;
+	public:
+	Prepender(std::function<std::string(size_t)>&& func, const std::string& s) 
+		: m_func(func), m_data(s) {}
+	std::string operator()(size_t n) {
+		return m_data + m_func(n);
+	}
+};
+
+/** 
+ * Appends an arbitrary string in front of the generated sequence.
+ */
+class Appender {
+	const std::function<std::string(size_t)> m_func;
+	const std::string& m_data;
+	public:
+	Appender(std::function<std::string(size_t)>&& func, const std::string& s) 
+		: m_func(func), m_data(s) {}
+	std::string operator()(size_t n) {
+		return m_func(n) + m_data;
+	}
+};
+
+
+constexpr const char*const usage_message = "You need to provide either a string with -ex or a string generator with -g.";
+
 namespace google {}
 namespace gflags {}
+void help(const char*const prgname) {
+		using namespace google;
+		using namespace gflags;
+        std::vector<CommandLineFlagInfo> info;
+        GetAllFlags(&info);
+
+        std::cout << prgname << " (options) {-ex (string) | -g [frls7] }" << std::endl;
+        std::cout << usage_message << std::endl << std::endl;
+        std::cout
+            << std::setw(20) << std::setiosflags(std::ios::left) << "Parameter"
+            << std::setw(10) << "Type"
+            << std::setw(20) << "Default"
+            << std::setw(20) << "Current"
+            << "Description" << std::endl;
+        std::cout << std::endl;
+         for(auto it = info.cbegin(); it != info.cend(); ++it) {
+             if(it->filename != __FILE__) continue;
+                 std::cout
+                    << std::setw(20) << std::setiosflags(std::ios::left)<< (std::string("--")+ it->name)
+                    << std::setw(10) << it->type
+                    << std::setw(20) << (std::string("(") + it->default_value + ")")
+                    << std::setw(20) << (std::string("(") + it->current_value + ")")
+                    << it->description << std::endl;
+         }
+}
+
+
 int main(int argc, char **argv)
 {
+	if(argc == 1 || strcmp(argv[1],"-h") == 0 || strcmp(argv[1],"--help") == 0 || strcmp(argv[1],"-help") == 0) {
+		help(argv[0]);
+		return 0;
+	}
 	{
 		using namespace google;
 		using namespace gflags;
-//		SetUsageMessage(Summary);
+		SetUsageMessage(usage_message);
 		ParseCommandLineFlags(&argc, &argv, true);
 	}
-	if(!FLAGS_examine.empty()) {
-		print_analysis(StringStats(std::move(FLAGS_examine)), FLAGS_zeroBasedNumbering);
+	if(!FLAGS_ex.empty()) {
+		StringStats(std::move(FLAGS_ex)).print(FLAGS_zeroindex);
 		return EXIT_SUCCESS;
 	}
-	parallel_filter(
+	std::function<std::string(size_t)> generator = intToString;
+	if(!FLAGS_generator.empty()) {
+		switch(FLAGS_generator.at(0)) {
+			case 'f':
+				generator = fibonacci_word;
+				break;
+			case 'r':
+				generator = rabbit_sequence;
+				break;
+			case 'l':
+				generator = fib_lzl;
+				break;
+			case 's':
+				generator = intToStandardWord;
+				break;
+			case '7':
+				generator = fib_lz77;
+				break;
+			default:
+				help(argv[0]);
+				return 0;
+				break;
+		}
+	} else {
+		help(argv[0]);
+		return 0;
+	}
+
+	if(!FLAGS_appendString.empty())
+		generator = Appender(std::move(generator), FLAGS_appendString);
+	if(!FLAGS_prependString.empty())
+		generator = Prepender(std::move(generator), FLAGS_prependString);
+
+	std::mutex mutexOutput;
+	map_parallel(
+			generator,
+			FLAGS_minlimit,
+			FLAGS_maxlimit,
+			[&mutexOutput] (size_t index, std::string& str) {
+				if(str.empty()) return;
+				const StringStats stats = StringStats(std::move(str));
+				if(stats.size() == 0) return;
+				// const int rotation = rotation_order(stats.sa,stats.isa);
+				// const int reverse_rotation = reverse_rotation_order(stats.sa,stats.isa);
+			//	if(rotation >= 0 || reverse_rotation >= 0) 
+				{
+					std::unique_lock<std::mutex> lock(mutexOutput);
+					print_value("index", index);
+					stats.print(FLAGS_zeroindex);
+					print_ending();
+				}
+
+			/* 
+				if(str.empty()) return;
+				const StringStats stats = StringStats(std::move(str));
+				if(stats.size() == 0) return;
+				const auto& sa = stats.sa;
+				const size_t q = sa[0];
+				const size_t m = (sa.size() + sa[1]) - sa[0];
+				for(size_t i = 2; i < sa.size(); ++i)
+					if(sa[i] != static_cast<int>( (sa[i-1]+m) % sa.size()) ) return;
+				const int rotation = rotation_order(stats.sa,stats.isa);
+				if(rotation >= 0)
+				{
+					std::unique_lock<std::mutex> lock(mutexOutput);
+					stats.print(FLAGS_zeroindex);
+					print_value("q", q);
+					print_value("m", m);
+					print_ending();
+				}
+				*/
+			});
+
+	/*
+	map_parallel(
 			intToString,
 			0, 1ULL<<20,
 			[] (const StringStats& stats) { //predicate
@@ -386,7 +511,7 @@ int main(int argc, char **argv)
 				print_value("a", std::count(BOUNDS(text), 'a'));
 				print_value("b", std::count(BOUNDS(text), 'b'));
 			});
-
+*/
 //run(lzclassic);
 //	run(fibonacci);
 //	run(lzl);

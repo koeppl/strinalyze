@@ -1,9 +1,17 @@
+/** 
+ * @file substring.hpp
+ * @brief Takes an index-interval of a container
+ * @author Dominik Köppl
+ * 
+ */
 #ifndef SUBSTRING_HPP
 #define SUBSTRING_HPP
 
 #include <cstddef>
 #include <ostream>
 
+/** A wrapper around an array-container that accesses only elements of an interval.
+ */
 template<class T>
 class Substring {
 	const T& m_v;
@@ -44,8 +52,6 @@ class Substring {
 	const const_iterator end() const {
 		return m_v.begin() + m_end;
 	}
-
-
 
 	size_type size() const {
 		return m_end - m_begin; 
