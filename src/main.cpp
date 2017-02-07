@@ -85,6 +85,40 @@ int reverse_rotation_order(const T& a , const T& b) {
 	return (azero < bzero) ? (bzero - azero) : (bzero + length - azero);
 }
 
+/**
+ * Constructs the LPF array
+ * @param sa the suffix array
+ * @param lcp the LCP array
+ * @return the LPF array
+ * @author Crochemore et al., "LPF computation revisited", IWOCA'09
+ */
+template<class lpf_t, class lcp_t, class isa_t>
+lpf_t create_lpf(const lcp_t& lcp, const isa_t& isa) {
+	const int n = lcp.size();
+	lpf_t lcpcopy(n+1);
+	for(int i = 0; i < n; ++i) { lcpcopy[i] = lcp[i]; }
+	lcpcopy[n] = 0;
+	lpf_t prev(n);
+	lpf_t next(n);
+	lpf_t lpf(n);
+	constexpr int undef { static_cast<int>(-1) };
+	for(int r = 0; r < n; ++r) {
+		prev[r] = r-1;
+		next[r] = r+1;
+	}
+	DCHECK_EQ(prev[0], undef);
+	for(int j = n; j > 0; --j) {
+		const int i = j-1; DCHECK_GT(j,0);
+		const int r = isa[i];
+		lpf[i] = std::max(lcpcopy[r], lcpcopy[next[r]] );
+		DCHECK_LT(next[r],n+1);
+
+		lcpcopy[next[r]] = std::min(lcpcopy[r], lcpcopy[next[r]]);
+		if(prev[r] != undef) { next[prev[r]] = next[r]; }
+		if(next[r] < n) { prev[next[r]] = prev[r]; }
+	}
+	return lpf;
+}
 
 /** 
  * Creates the Suffix Array of text, based on SAIS
@@ -207,6 +241,7 @@ struct StringStats {
 	const vektor_type sa;
 	const vektor_type isa;
 	const vektor_type lcp;
+	const vektor_type lpf;
 	const vektor_type psi;
 	const vektor_type lf;
 
@@ -216,6 +251,7 @@ struct StringStats {
 		, sa(create_sa<vektor_type>(text, FLAGS_stripDollar))
 		, isa(inverse<vektor_type>(sa))
 		, lcp(create_lcp<vektor_type>(text, sa, isa))
+		, lpf(create_lpf<vektor_type,vektor_type,vektor_type>(lcp, isa))
 		, psi(psi_array<vektor_type>(sa, isa))
 		, lf(lf_array<vektor_type>(sa, isa))
 	{
@@ -236,6 +272,7 @@ struct StringStats {
 		print_array(setwidth, "SA" , ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + sa[i] ; } ));
 		print_array(setwidth, "LCP", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lcp[i]; } ));
 		print_array(setwidth, "PLCP", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lcp[isa[i]]; } ));
+		print_array(setwidth, "LPF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lpf[i]; } ));
 		print_array(setwidth, "ISA", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + isa[i]; } ));
 		print_array(setwidth, "psi", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + psi[i]; } ));
 		print_array(setwidth, "LF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + lf[i]; } ));
