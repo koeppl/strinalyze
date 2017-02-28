@@ -22,7 +22,7 @@ The program uses Yuta Mori's SAIS algorithm (https://sites.google.com/site/yuta2
 
 # Example
 
-> ./strinalyze -ex 'babarabar'
+> ./strinalyze 'babarabar'
 ~~~~
 T: babarabar
 |T|: 9
@@ -36,4 +36,5 @@ PLCP  0  4  3  2  1  0  2  1  0  0
  psi  6  7  8  9 10  3  4  5  1  2
   LF  9 10  6  7  8  1  2  3  4  5
  BWT  r  r  b  b  b  $  a  a  a  a
+C : { a : 4, b : 3, r : 2, }
 ~~~~
