@@ -227,7 +227,6 @@ void print_ending() {
 
 
 
-
 struct StringStats {
 #ifdef NDEBUG
 		typedef checked_vector<int> vektor_type;
@@ -277,8 +276,14 @@ struct StringStats {
 		print_array(setwidth, "psi", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + psi[i]; } ));
 		print_array(setwidth, "LF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + lf[i]; } ));
 		print_array(setwidth, "BWT", ArrayFunctional<char>  (size(), [&] (size_t i) { return text[sa[lf[i]]] == 0 ? '$' : text[sa[lf[i]]]; } ));
-		print_value("a", std::count(BOUNDS(text), 'a'));
-		print_value("b", std::count(BOUNDS(text), 'b'));
+		
+		size_t C[255] = {0};
+		std::for_each(BOUNDS(text), [&] (const unsigned char& c) { ++C[c]; });
+		std::cout << "C : { ";
+		for(size_t i = 0; i < 255; ++i) {
+			if(C[i] != 0) std::cout << static_cast<char>(i) << " : " << C[i] << ", ";
+		}
+		std::cout << "} " << std::endl;
 		print_value("rotation_order", rotation_order(sa,isa));
 		print_value("reverse_rotation_order", reverse_rotation_order(sa, isa)); 
 	}
@@ -481,6 +486,12 @@ int main(int argc, char **argv)
 				break;
 		}
 	} else {
+		if(argc > 1) {
+			StringStats(std::move(argv[1])).print(FLAGS_zeroindex);
+			return EXIT_SUCCESS;
+		}
+
+
 		help(argv[0]);
 		return 0;
 	}
