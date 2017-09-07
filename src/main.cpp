@@ -229,9 +229,9 @@ void print_ending() {
 
 struct StringStats {
 #ifdef NDEBUG
-		typedef checked_vector<int> vektor_type;
-#else
 		typedef std::vector<int> vektor_type;
+#else
+		typedef checked_vector<int> vektor_type;
 		//#define vektor_type sdsl::int_vector<>
 #endif
 
