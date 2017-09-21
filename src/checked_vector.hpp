@@ -24,11 +24,11 @@
 //		checked_vector(typename std::vector<T>::size_type n, const typename std::vector<T>::value_type& val = std::vector<T>::value_type()) 
 //			: std::vector<T>(n, val) { }
 #ifndef NDEBUG
-		T& operator[](size_t n) override { 
+		T& operator[](size_t n) noexcept { 
 			DCHECK_LT(n, this->size());
 			return std::vector<T>::at(n); 
 		}
-		const T& operator[](size_t n) const override { 
+		const T& operator[](size_t n) const noexcept { 
 			DCHECK_LT(n, this->size());
 			return std::vector<T>::at(n);
 		}
