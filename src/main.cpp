@@ -274,6 +274,7 @@ struct StringStats {
 		print_array(setwidth, "LPF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return lpf[i]; } ));
 		print_array(setwidth, "ISA", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + isa[i]; } ));
 		print_array(setwidth, "psi", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + psi[i]; } ));
+		print_array(setwidth, "phi", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + sa[(isa[i]+sa.size()-1) % sa.size()]; } ));
 		print_array(setwidth, "LF", ArrayFunctional<size_t>(size(), [&] (size_t i) { return (isZeroBasedNumbering ? 0 : 1) + lf[i]; } ));
 		print_array(setwidth, "BWT", ArrayFunctional<char>  (size(), [&] (size_t i) { return text[sa[lf[i]]] == 0 ? '$' : text[sa[lf[i]]]; } ));
 		
